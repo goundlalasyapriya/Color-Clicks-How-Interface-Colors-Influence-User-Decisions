@@ -15,8 +15,9 @@ import colorsys
 import traceback
 
 # ---------------- CONFIG ----------------
-MODEL_PATH = r"C:\Users\LASYA PRIYA\PycharmProjects\ProgramPandas\color_click_recommender_rf.joblib"
-DATA_PATH  = r"C:\Users\LASYA PRIYA\PycharmProjects\ProgramPandas\augmented_color_click_dataset.csv"
+BASE_DIR = os.path.dirname(__file__)
+MODEL_PATH = os.path.join(BASE_DIR, "color_click_recommender_rf.joblib")
+DATA_PATH = os.path.join(BASE_DIR, "augmented_color_click_dataset.csv")
 TOP_CANDIDATES = 20
 # ----------------------------------------
 
@@ -28,9 +29,7 @@ st.markdown(
     """
     <style>
       /* Pastel-light professional look */
-      .title {font-size:56px; color:#
-; font-weight:800; text-align:
-Center; padding-bottom:6px;}
+      .title {font-size:56px; color:#ffffff; font-weight:800; text-align:center; padding-bottom:6px;}
       .subtitle {font-size:32px; color:#666; text-align:center; margin-bottom:18px;}
       .card {background:linear-gradient(180deg,#ffffff,#fbfbff); padding:14px; border-radius:12px; box-shadow:0 6px 30px rgba(40,40,90,0.04);}
       .metric {background:#fff; border-radius:8px; padding:8px;}
@@ -48,7 +47,7 @@ Center; padding-bottom:6px;}
       }
       /* Small nice card for inputs */
       .input-card {padding:10px; border-radius:10px; background: #ffffff; box-shadow:0 6px 18px rgba(0,0,0,0.03);}
-      /* Tabs alignment (approx) - placing tabs on right column */
+      /* Tabs alignment */
       .stTabs [role="tablist"] {gap: 6px;}
     </style>
     """, unsafe_allow_html=True
@@ -60,7 +59,6 @@ with col_h1:
     st.markdown("<div class='title'>Color Clicks — Smart Recommendation Dashboard</div>", unsafe_allow_html=True)
 
 with col_h2:
-    # small status box (model & rows)
     pass
 
 # ---------- Load model & data ----------
@@ -145,7 +143,7 @@ if metrics:
 
 st.sidebar.info("Why RGB? RGB numeric values precisely encode colors for the model. Why Time Spent? Time spent captures engagement and helps predict clicks together with color.")
 
-# build user_row dictionary for model features (fill missing features with dataset mode / sensible defaults)
+# build user_row dictionary
 user_row = {}
 for f in features:
     lf = f.lower()
@@ -162,11 +160,7 @@ for f in features:
     elif 'season' in lf:
         user_row[f] = season
     elif 'time' in lf:
-        # Align with training column name — commonly Time_Spent_sec or similar
-        if 'Time_Spent_sec' in df.columns and 'Time_Spent_sec' in features:
-            user_row[f] = time_spent
-        else:
-            user_row[f] = time_spent
+        user_row[f] = time_spent
     elif f in ['r','g','b']:
         user_row[f] = 0
     else:
@@ -174,8 +168,7 @@ for f in features:
 
 input_preview_df = pd.DataFrame([user_row])
 
-# ---------------- Tabs Layout (placed in right column area visually) ----------------
-# Create a layout so tabs appear in a wide central area
+# ---------------- Tabs Layout ----------------
 tabs = st.tabs(["🏠 Overview", "📈 Color Analytics", "👥 User Behavior", "⏱ Engagement Trends", "💡 Insights"])
 
 # ---------- Helper functions ----------
@@ -187,24 +180,18 @@ def hex_to_rgb_tuple(h):
         return (128,128,128)
 
 def safe_predict_proba(X):
-    """Try predict_proba, if not available fallback to predict or heuristic scores."""
-    # if model has predict_proba
     if hasattr(model, "predict_proba"):
         try:
             proba = model.predict_proba(X)
-            # if binary, return prob of positive class for each row
             if proba.shape[1] == 2:
                 return proba[:,1]
             else:
-                # multi-class: take max probability as proxy
                 return np.max(proba, axis=1)
-        except Exception as e:
-            raise
-    # else fallback to predict (0/1)
+        except:
+            pass
     if hasattr(model, "predict"):
         preds = model.predict(X)
         return np.array(preds, dtype=float)
-    # ultimate fallback - return zeros
     return np.zeros(len(X))
 
 # ---------------- Tab 0: Overview ----------------
@@ -221,13 +208,11 @@ with tabs[0]:
     st.write("Hex:", hex_preview)
     st.markdown("---")
 
-    # Recommend button block with animation CSS
     st.markdown("<div class='recommend-btn'>", unsafe_allow_html=True)
     if st.button("🔮 Recommend best color"):
         st.info("Generating recommendations…")
         try:
             if mode == 'supervised':
-                # build candidate list
                 candidates = []
                 if isinstance(palette, dict) and len(palette)>0:
                     candidates.extend(list(palette.values()))
@@ -237,7 +222,6 @@ with tabs[0]:
                     centers = KMeans(n_clusters=min(12, max(3, len(df))), random_state=1, n_init=10).fit(df[['r','g','b']].values).cluster_centers_.round().astype(int)
                     for c in centers:
                         candidates.append(f"#{int(c[0]):02x}{int(c[1]):02x}{int(c[2]):02x}")
-                # dedupe
                 uniq=[]
                 for h in candidates:
                     if h not in uniq:
@@ -251,9 +235,7 @@ with tabs[0]:
                     if 'r' in features: row['r']=rr
                     if 'g' in features: row['g']=gg
                     if 'b' in features: row['b']=bb
-                    # create DataFrame with exact columns and order
                     Xc = pd.DataFrame([row])
-                    # ensure all features present (fill missing with dataset mode or 0)
                     for col in features:
                         if col not in Xc.columns:
                             Xc[col] = df[col].mode().iloc[0] if col in df.columns else 0
@@ -261,12 +243,9 @@ with tabs[0]:
                     try:
                         p_arr = safe_predict_proba(Xc)
                         p_click = float(p_arr[0]) if len(p_arr)>0 else ((rr+gg+bb)/3)/255
-                        # normalize if predict returned 0/1 -> keep as is
-                    except Exception as e:
-                        # fallback heuristic (brightness)
+                    except:
                         p_click = ((rr+gg+bb)/3)/255
                     rows.append((hexc, rr, gg, bb, p_click))
-                # choose best
                 rows_sorted = sorted(rows, key=lambda x: x[4], reverse=True)
                 best_hex, br, bg, bb_, best_prob = rows_sorted[0]
                 st.success(f"Recommended color: **{best_hex.upper()}** — predicted click score **{best_prob:.2f}**")
@@ -278,7 +257,6 @@ with tabs[0]:
                         st.markdown(f"<div style='width:80px;height:48px;border-radius:8px;background:{h};border:1px solid #ddd'></div>", unsafe_allow_html=True)
                         st.caption(f"{h} — {p:.2f}")
             else:
-                # unsupervised path: predict cluster from preview rgb
                 row = user_row.copy()
                 if 'r' in features: row['r']=r
                 if 'g' in features: row['g']=g
@@ -296,7 +274,6 @@ with tabs[0]:
                 except Exception as e:
                     st.error("Prediction failed: " + str(e))
                     st.write(traceback.format_exc())
-
         except Exception as e:
             st.error("Recommendation pipeline failed: " + str(e))
             st.write(traceback.format_exc())
@@ -313,142 +290,3 @@ with tabs[1]:
     c1.plotly_chart(fig_r, use_container_width=True)
     c2.plotly_chart(fig_g, use_container_width=True)
     c3.plotly_chart(fig_b, use_container_width=True)
-
-    st.markdown("---")
-    st.markdown("### Color clusters & click rate")
-    df_vis = df.copy()
-    if kmeans is None:
-        k = min(12, max(3, len(df)//500))
-        k = max(3, k)
-        kmeans_vis = KMeans(n_clusters=k, random_state=1, n_init=10)
-        df_vis['cluster'] = kmeans_vis.fit_predict(df_vis[['r','g','b']].values)
-        centers_vis = kmeans_vis.cluster_centers_.round().astype(int)
-        palette_vis = {i:f"#{c[0]:02x}{c[1]:02x}{c[2]:02x}" for i,c in enumerate(centers_vis)}
-    else:
-        df_vis['cluster'] = kmeans.predict(df_vis[['r','g','b']].values)
-        palette_vis = palette
-
-    if click_col:
-        cluster_stats = df_vis.groupby('cluster')[click_col].mean().reset_index().rename(columns={click_col:'click_rate'})
-        cluster_stats['hex'] = cluster_stats['cluster'].map(palette_vis)
-        fig_cluster = px.bar(cluster_stats, x='cluster', y='click_rate', color='hex',
-                             color_discrete_map={h:h for h in cluster_stats['hex']}, title="Cluster vs Click Rate")
-        st.plotly_chart(fig_cluster, use_container_width=True)
-    else:
-        cluster_counts = df_vis['cluster'].value_counts().reset_index()
-        cluster_counts.columns = ['cluster','count']
-        fig_cluster = px.bar(cluster_counts, x='cluster', y='count', title="Cluster counts")
-        st.plotly_chart(fig_cluster, use_container_width=True)
-
-    st.markdown("---")
-    st.markdown("### 3D RGB view (sampled)")
-    sample = df_vis.sample(min(2000, len(df_vis)), random_state=1)
-    fig_3d = px.scatter_3d(sample, x='r', y='g', z='b',
-                          color=click_col if click_col else 'cluster',
-                          hover_data=['r','g','b'],
-                          title="3D RGB scatter (sampled)")
-    st.plotly_chart(fig_3d, use_container_width=True)
-
-# ---------------- Tab 2: User Behavior ----------------
-with tabs[2]:
-    st.subheader("User Behavior — Demographics & Preferences")
-    # Age groups
-    if 'age' in df.columns and click_col:
-        st.markdown("### Click rate by age group")
-        df['age_group'] = pd.cut(df['age'], bins=[0,18,25,35,50,100], labels=['<18','18-25','25-35','35-50','50+'])
-        ag = df.groupby('age_group')[click_col].mean().reset_index()
-        st.plotly_chart(px.bar(ag, x='age_group', y=click_col, title="Click rate by age group"), use_container_width=True)
-    # Gender
-    if 'gender' in df.columns and click_col:
-        st.markdown("### Click rate by gender")
-        gg = df.groupby('gender')[click_col].mean().reset_index()
-        st.plotly_chart(px.bar(gg, x='gender', y=click_col, title="Click rate by gender"), use_container_width=True)
-    # Mood heatmap
-    # Accept both 'Mood' and 'mood' columns (case sensitivity)
-    mood_col = next((c for c in df.columns if c.lower() == 'mood'), None)
-    if mood_col:
-        st.markdown("### Mood vs average RGB (heatmap)")
-        heat = df.groupby(mood_col)[['r','g','b']].mean()
-        fig_heat = px.imshow(heat, labels=dict(x='RGB', y='Mood', color='mean'), x=['r','g','b'], y=heat.index, title="Mood vs avg RGB")
-        st.plotly_chart(fig_heat, use_container_width=True)
-    # Product
-    if 'Product_Category' in df.columns and click_col:
-        st.markdown("### Click rate by product category")
-        pc = df.groupby('Product_Category')[click_col].mean().reset_index().sort_values(click_col, ascending=False)
-        st.plotly_chart(px.pie(pc, values=click_col, names='Product_Category', title="Click rate per product category"), use_container_width=True)
-
-# ---------------- Tab 3: Engagement Trends ----------------
-with tabs[3]:
-    st.subheader("Engagement Trends — Time & Brightness")
-
-    # Time spent vs click: use string labels for bins to avoid Interval JSON problem
-    if 'Time_Spent_sec' in df.columns and click_col:
-        st.markdown("### Time Spent vs Click (binned)")
-        df_time = df.copy()
-        df_time['time_bin'] = pd.cut(df_time['Time_Spent_sec'], bins=10)
-        time_agg = df_time.groupby('time_bin')[click_col].mean().reset_index()
-        # Convert Interval to strings for plotly
-        time_agg['time_bin_str'] = time_agg['time_bin'].astype(str)
-        fig_time = px.line(time_agg, x='time_bin_str', y=click_col, markers=True, title="Click rate across time spent bins")
-        fig_time.update_xaxes(title="Time spent bin")
-        st.plotly_chart(fig_time, use_container_width=True)
-    else:
-        st.info("Add `Time_Spent_sec` column to enable Time vs Click visualizations.")
-
-    st.markdown("---")
-    st.markdown("### Brightness vs Click Rate")
-    df['brightness'] = df[['r','g','b']].mean(axis=1)
-    if click_col:
-        bright_agg = df.groupby(pd.cut(df['brightness'], bins=12))[click_col].mean().reset_index()
-        bright_agg['brightness_str'] = bright_agg['brightness'].astype(str)
-        fig_b = px.bar(bright_agg, x='brightness_str', y=click_col, title="Brightness bucket vs Click Rate")
-        fig_b.update_xaxes(title="Brightness bin")
-        st.plotly_chart(fig_b, use_container_width=True)
-    else:
-        st.plotly_chart(px.histogram(df, x='brightness', nbins=20, title="Brightness distribution"), use_container_width=True)
-
-    st.markdown("---")
-    st.markdown("### Correlation heatmap (numeric features)")
-    numeric_cols = ['r','g','b']
-    if 'Time_Spent_sec' in df.columns:
-        numeric_cols.append('Time_Spent_sec')
-    if click_col:
-        numeric_cols.append(click_col)
-    corr = df[numeric_cols].corr()
-    fig_corr = px.imshow(corr, text_auto=True, color_continuous_scale='RdBu', title="Correlation matrix")
-    st.plotly_chart(fig_corr, use_container_width=True)
-
-# ---------------- Tab 4: Insights ----------------
-with tabs[4]:
-    st.subheader("Auto-generated Insights")
-    insights = []
-    try:
-        if click_col and 'cluster' in df_vis.columns:
-            cs = df_vis.groupby('cluster')[click_col].mean().reset_index()
-            top_cluster = int(cs.sort_values(click_col, ascending=False).iloc[0]['cluster'])
-            insights.append(f"Cluster {top_cluster} shows the highest average click probability.")
-    except Exception:
-        pass
-    if 'Mood' in df.columns:
-        try:
-            mood_avg = df.groupby('Mood')[['r','g','b']].mean()
-            mood_avg['brightness'] = mood_avg.mean(axis=1)
-            max_mood = mood_avg['brightness'].idxmax()
-            insights.append(f"Users labeled '{max_mood}' prefer brighter colors on average.")
-        except Exception:
-            pass
-    if 'Product_Category' in df.columns and click_col:
-        try:
-            best_prod = df.groupby('Product_Category')[click_col].mean().idxmax()
-            insights.append(f"Products in '{best_prod}' category attract the most clicks on average.")
-        except Exception:
-            pass
-
-    if not insights:
-        st.write("No strong insight derived from current dataset.")
-    else:
-        for it in insights:
-            st.write("•", it)
-
-# ---------------- Footer / end ----------------
-st.markdown("<div style='height:18px'></div>", unsafe_allow_html=True)
