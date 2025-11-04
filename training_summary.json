@@ -1,0 +1,12 @@
+{
+  "metrics": {
+    "accuracy": 0.6638655462184874,
+    "f1": 0.7841726618705036,
+    "roc_auc": 0.6214419978517723,
+    "best_params": {
+      "clf__max_depth": 10,
+      "clf__n_estimators": 200
+    }
+  },
+  "mode": "supervised"
+}
