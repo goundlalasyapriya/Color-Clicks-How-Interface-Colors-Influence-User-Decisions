@@ -336,6 +336,3 @@ Koneru Lakshmaiah Education Foundation
 ---
 
 
-This project is intended for educational, research, and learning purposes.
-
-Copyright © 2026 Lasya Priya. All Rights Reserved.
